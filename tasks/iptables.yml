@@ -1,0 +1,51 @@
+- name: Enable iptables
+  service:
+    name: iptables
+    enabled: true
+    state: started
+
+- name: iptables - Allow VPN forwarding
+  iptables:
+    chain: FORWARD
+    source: "{{openvpn_server_network}}/24"
+    jump: ACCEPT
+    comment: "Allow VPN forwarding"
+
+- name: iptables - Allow incoming VPN connection
+  iptables:
+    chain: INPUT
+    protocol: "{{openvpn_proto}}"
+    destination_port: "{{openvpn_port}}"
+    jump: ACCEPT
+    comment: "Allow incoming VPN connection"
+
+- name: iptables - Accept packets from VPN tunnel adaptor
+  iptables:
+    chain: INPUT
+    in_interface: tun0
+    jump: ACCEPT
+    comment: "Accept packets from VPN tunnel adaptor"
+
+- name: iptables - Perform NAT readdressing
+  iptables:
+    table: nat
+    chain: POSTROUTING
+    source: "{{openvpn_server_network}}/24"
+    to_source: "{{ansible_default_ipv4.address}}"
+    jump: SNAT
+    comment: "Perform NAT readdressing"
+
+- name: iptables - save everything (CentOS/RHEL/Fedora)
+  shell: iptables-save > /etc/sysconfig/iptables
+  become: yes
+  when: ansible_os_family == 'RedHat'
+
+- name: Install iptables-persistent (Debian/Ubuntu)
+  package:
+    name: iptables-persistent
+    state: present
+  when: ansible_pkg_mgr == "Debian"
+
+- name: iptables - save everything (Debian/Ubuntu)
+  command: /etc/init.d/iptables-persistent save
+  when: ansible_os_family == 'Debian'
